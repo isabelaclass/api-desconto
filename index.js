@@ -1,4 +1,4 @@
-require('dotent').config();
+require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
 const app = express();
@@ -10,20 +10,36 @@ redisClient.connect();
 redisClient.on('error', err => console.log('Redis error:', err));
 
 function aplicarDesconto(produtos) {
-  return produtos.map(produto => {
-    let precoDesconto = produto.preco;
-
-    if (produto.quantidade > 100) {
-      precoDesconto = produto.preco * 0.8;
-    }
-
-    return {
-      ...produto,
-      precoDesconto: precoDesconto.toFixed(2)
-    };
-  });
-}
-
+    const hoje = new Date();
+  
+    return produtos.map(produto => {
+      let precoDesconto = produto.valor;
+  
+      const dataEntrada = new Date(produto.data_produto);
+      const diasEstoque = Math.floor((hoje - dataEntrada) / (1000 * 60 * 60 * 24));
+  
+      let percentualDesconto = 0;
+  
+      if (produto.quantidade > 100) {
+        percentualDesconto += 20;
+      }
+  
+      if (diasEstoque > 30) {
+        percentualDesconto += 10;
+      }
+  
+      if (percentualDesconto > 0) {
+        precoDesconto = produto.valor * (1 - percentualDesconto / 100);
+      }
+  
+      return {
+        ...produto,
+        precoDesconto: precoDesconto.toFixed(2),
+        descontoAplicado: percentualDesconto + '%'
+      };
+    });
+  }
+  
 app.get('/produtos-desconto', async (req, res) => {
   try {
     const cacheKey = 'itens_desconto';
@@ -36,9 +52,9 @@ app.get('/produtos-desconto', async (req, res) => {
 
     const response = await axios.get(process.env.API_URL_PRODUTOS);
 
-    const comDesconto = aplicarDesconto(response.data);
+    const comDesconto = aplicarDesconto(response.data.produtos);
 
-    await redisClient.setEx(cacheKey, 300, JSON.stringify(comDesconto))
+    await redisClient.setEx(cacheKey, 300, JSON.stringify(comDesconto));
     res.json(comDesconto);
   } catch (error) {
     console.error('Erro ao buscar produtos:', error.message);

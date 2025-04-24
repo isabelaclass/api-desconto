@@ -47,15 +47,22 @@ app.get('/produtos-desconto', async (req, res) => {
     const cached = await redisClient.get(cacheKey);
 
     if(cached) {
-        return res.json(JSON.parse(cached));
+        const cachedData = JSON.parse(cached);
+        return res.json({
+            from_cache: true,
+            produtos: cachedData
+          });
     }
 
     const response = await axios.get(process.env.API_URL_PRODUTOS);
 
     const comDesconto = aplicarDesconto(response.data.produtos);
 
-    await redisClient.setEx(cacheKey, 300, JSON.stringify(comDesconto));
-    res.json(comDesconto);
+    await redisClient.setEx(cacheKey, 10, JSON.stringify(comDesconto));
+    res.json({
+        from_cache: false,
+        produtos: comDesconto
+    });
   } catch (error) {
     console.error('Erro ao buscar produtos:', error.message);
     res.status(500).json({ erro: 'Erro ao buscar produtos' });
